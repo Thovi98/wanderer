@@ -1,0 +1,72 @@
+name: Build Wanderer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ------------------------
+      # 🐹 Build Go (db)
+      # ------------------------
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build DB
+        working-directory: db
+        run: |
+          go mod tidy
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o pocketbase
+
+      # ------------------------
+      # 🌐 Build Web
+      # ------------------------
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Web
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          npm prune --production
+
+      # ------------------------
+      # 🔎 Meilisearch
+      # ------------------------
+      - name: Download Meilisearch
+        run: |
+          curl -L https://install.meilisearch.com | sh
+
+      # ------------------------
+      # 📦 Package
+      # ------------------------
+      - name: Prepare package
+        run: |
+          mkdir wanderer-build
+
+          cp -r web/build wanderer-build/web
+          cp -r db wanderer-build/db
+          cp meilisearch wanderer-build/search
+
+          tar -czf wanderer.tar.gz wanderer-build
+
+      # ------------------------
+      # 🚀 Release
+      # ------------------------
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wanderer.tar.gz
