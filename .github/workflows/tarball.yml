@@ -126,7 +126,7 @@ jobs:
           cp -r web/node_modules wanderer-build/web/node_modules
           cp web/package.json wanderer-build/web/package.json
           
-          cp -r dist/* wanderer-build/db/*
+          rsync -a db/ wanderer-build/db/
           cp dist/pocketbase wanderer-build/db/pocketbase
           
           cp meilisearch wanderer-build/search/meilisearch
