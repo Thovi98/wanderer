@@ -118,11 +118,12 @@ jobs:
           set -e
 
           mkdir -p wanderer-build/db
+          mkdir -p wanderer-build/search
           mkdir -p wanderer-build/web
 
           cp -r web/build wanderer-build/web
           cp dist/pocketbase wanderer-build/db/pocketbase
-          cp meilisearch wanderer-build/meilisearch
+          cp meilisearch wanderer-build/search/meilisearch
 
           echo "$VERSION" > wanderer-build/VERSION
           echo "$ARCH" >> wanderer-build/ARCH
