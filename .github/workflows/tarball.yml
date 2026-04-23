@@ -123,12 +123,7 @@ jobs:
       # ----------------------------
       - name: Download Meilisearch
         run: |
-          if [ "$ARCH" = "arm64" ]; then
-            MEILI_ARCH="aarch64"
-          else
-            MEILI_ARCH="x86_64"
-          fi
-          curl -L https://github.com/meilisearch/meilisearch/releases/latest/download/meilisearch-linux-$MEILI_ARCH \
+          curl -L https://github.com/meilisearch/meilisearch/releases/latest/download/meilisearch-linux-$ARCH \
             -o meilisearch
           chmod +x meilisearch
 
