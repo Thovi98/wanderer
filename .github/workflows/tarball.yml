@@ -97,6 +97,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          npm prune --production
 
 
       ######################################################################
@@ -121,7 +122,9 @@ jobs:
           mkdir -p wanderer-build/search
           mkdir -p wanderer-build/web
 
-          cp -r web/build wanderer-build/web
+          cp -r web/build wanderer-build/web/build
+          cp -r web/node_modules wanderer-build/web/node_modules
+          cp web/package.json wanderer-build/web/package.json
           cp dist/pocketbase wanderer-build/db/pocketbase
           cp meilisearch wanderer-build/search/meilisearch
 
