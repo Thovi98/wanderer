@@ -74,10 +74,10 @@ jobs:
       - name: Build DB
         working-directory: db
         run: |
-          go mod download
-          CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
-            go build -o pocketbase-${ARCH}
-
+          mkdir -p dist
+          GOOS=linux GOARCH=${ARCH} \
+          go build -o dist/pocketbase
+          
 
       ######################################################################
       # 🌐 FRONTEND (shared build)
@@ -118,7 +118,7 @@ jobs:
           mkdir -p wanderer-build
 
           cp -r web/build wanderer-build/web
-          cp db/pocketbase wanderer-build/db/pocketbase
+          cp dist/pocketbase wanderer-build/db/pocketbase
           cp meilisearch wanderer-build/meilisearch
 
           tar -czf wanderer-${VERSION}-${ARCH}.tar.gz wanderer-build
