@@ -125,9 +125,6 @@ jobs:
           cp dist/pocketbase wanderer-build/db/pocketbase
           cp meilisearch wanderer-build/search/meilisearch
 
-          echo "$VERSION" > wanderer-build/VERSION
-          echo "$ARCH" >> wanderer-build/ARCH
-
           tar -czf wanderer-${VERSION}-${ARCH}.tar.gz wanderer-build
 
 
