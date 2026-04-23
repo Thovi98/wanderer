@@ -125,7 +125,10 @@ jobs:
           cp -r web/build wanderer-build/web/build
           cp -r web/node_modules wanderer-build/web/node_modules
           cp web/package.json wanderer-build/web/package.json
+          
           cp dist/pocketbase wanderer-build/db/pocketbase
+          cp -r db/* wanderer-build/db/*
+          
           cp meilisearch wanderer-build/search/meilisearch
 
           tar -czf wanderer-${VERSION}-${ARCH}.tar.gz wanderer-build
