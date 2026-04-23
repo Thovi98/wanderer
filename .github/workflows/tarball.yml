@@ -117,7 +117,8 @@ jobs:
         run: |
           set -e
 
-          mkdir -p wanderer-build
+          mkdir -p wanderer-build/db
+          mkdir -p wanderer-build/web
 
           cp -r web/build wanderer-build/web
           cp dist/pocketbase wanderer-build/db/pocketbase
