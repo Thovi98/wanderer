@@ -20,10 +20,14 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       matrix_arch: ${{ steps.matrix.outputs.arch }}
+      web_artifact: ${{ steps.web_build.outputs.artifact_name }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # ----------------------------
+      # Compute version
+      # ----------------------------
       - name: Compute version
         id: meta
         run: |
@@ -34,10 +38,37 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      # ----------------------------
+      # Build matrix
+      # ----------------------------
       - name: Build matrix
         id: matrix
         run: |
           echo 'arch=["amd64","arm64"]' >> $GITHUB_OUTPUT
+
+      # ----------------------------
+      # Build frontend once (shared)
+      # ----------------------------
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build Web
+        id: web_build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          echo "artifact_name=web_build" >> $GITHUB_OUTPUT
+
+      - name: Upload Web Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web_build
+          path: web/build
 
 
   ##########################################################################
@@ -61,73 +92,64 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      ######################################################################
-      # 🐹 GO BACKEND
-      ######################################################################
+      # ----------------------------
+      # Download frontend build
+      # ----------------------------
+      - uses: actions/download-artifact@v4
+        with:
+          name: web_build
+          path: web/build
 
+      # ----------------------------
+      # Setup Go
+      # ----------------------------
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.2"
           cache: true
 
+      # ----------------------------
+      # Build DB binary
+      # ----------------------------
       - name: Build DB
         working-directory: db
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=${ARCH} \
-          go build -o dist/pocketbase
-          
+          GOOS=linux GOARCH=${ARCH} go build -trimpath -ldflags="-s -w" -o dist/pocketbase
 
-      ######################################################################
-      # 🌐 FRONTEND (shared build)
-      ######################################################################
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: web/package-lock.json
-
-      - name: Build Web
-        working-directory: web
-        run: |
-          npm ci
-          npm run build
-
-
-      ######################################################################
-      # 🔎 MEILISEARCH
-      ######################################################################
-
+      # ----------------------------
+      # Download Meilisearch (arch-specific)
+      # ----------------------------
       - name: Download Meilisearch
         run: |
-          curl -fsSL https://install.meilisearch.com | sh
+          if [ "$ARCH" = "arm64" ]; then
+            MEILI_ARCH="aarch64"
+          else
+            MEILI_ARCH="x86_64"
+          fi
+          curl -L https://github.com/meilisearch/meilisearch/releases/latest/download/meilisearch-linux-$MEILI_ARCH \
+            -o meilisearch
           chmod +x meilisearch
 
-
-      ######################################################################
-      # 📦 PACKAGE
-      ######################################################################
-
+      # ----------------------------
+      # Package build
+      # ----------------------------
       - name: Package build
         run: |
           set -e
-
-          mkdir -p wanderer-build
-
+          mkdir -p wanderer-build/db
+          mkdir -p wanderer-build/web
+          
           cp -r web/build wanderer-build/web
-          cp dist/pocketbase wanderer-build/db/pocketbase
+          cp db/dist/pocketbase wanderer-build/db/pocketbase
           cp meilisearch wanderer-build/meilisearch
 
           tar -czf wanderer-${VERSION}-${ARCH}.tar.gz wanderer-build
 
-
-      ######################################################################
-      # 📤 UPLOAD ARTIFACT
-      ######################################################################
-
+      # ----------------------------
+      # Upload artifact
+      # ----------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -142,6 +164,7 @@ jobs:
   release:
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
 
     permissions:
       contents: write
