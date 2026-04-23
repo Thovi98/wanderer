@@ -6,68 +6,158 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+
+  ##########################################################################
+  # PREPARE
+  ##########################################################################
+
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      matrix_arch: ${{ steps.matrix.outputs.arch }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ------------------------
-      # 🐹 Build Go (db)
-      # ------------------------
+      - name: Compute version
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build matrix
+        id: matrix
+        run: |
+          echo 'arch=["amd64","arm64"]' >> $GITHUB_OUTPUT
+
+
+  ##########################################################################
+  # BUILD (multi-arch)
+  ##########################################################################
+
+  build:
+    needs: prepare
+
+    strategy:
+      matrix:
+        arch: ${{ fromJson(needs.prepare.outputs.matrix_arch) }}
+
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      ARCH: ${{ matrix.arch }}
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      ######################################################################
+      # 🐹 GO BACKEND
+      ######################################################################
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.2"
+          cache: true
 
       - name: Build DB
         working-directory: db
         run: |
-          go mod tidy
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o pocketbase
+          go mod download
+          CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
+            go build -o pocketbase-${ARCH}
 
-      # ------------------------
-      # 🌐 Build Web
-      # ------------------------
+
+      ######################################################################
+      # 🌐 FRONTEND (shared build)
+      ######################################################################
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
 
       - name: Build Web
         working-directory: web
         run: |
           npm ci
           npm run build
-          npm cache clean --force
-          npm prune --production
 
-      # ------------------------
-      # 🔎 Meilisearch
-      # ------------------------
+
+      ######################################################################
+      # 🔎 MEILISEARCH
+      ######################################################################
+
       - name: Download Meilisearch
         run: |
-          curl -L https://install.meilisearch.com | sh
+          curl -fsSL https://install.meilisearch.com | sh
+          chmod +x meilisearch
 
-      # ------------------------
-      # 📦 Package
-      # ------------------------
-      - name: Prepare package
+
+      ######################################################################
+      # 📦 PACKAGE
+      ######################################################################
+
+      - name: Package build
         run: |
-          mkdir wanderer-build
+          set -e
+
+          mkdir -p wanderer-build
 
           cp -r web/build wanderer-build/web
-          cp -r db wanderer-build/db
-          cp meilisearch wanderer-build/search
+          cp db/pocketbase-${ARCH} wanderer-build/db
+          cp meilisearch wanderer-build/meilisearch
 
-          tar -czf wanderer.tar.gz wanderer-build
+          echo "$VERSION" > wanderer-build/VERSION
+          echo "$ARCH" >> wanderer-build/ARCH
 
-      # ------------------------
-      # 🚀 Release
-      # ------------------------
-      - name: Create Release
+          tar -czf wanderer-${VERSION}-${ARCH}.tar.gz wanderer-build
+
+
+      ######################################################################
+      # 📤 UPLOAD ARTIFACT
+      ######################################################################
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanderer-${{ env.VERSION }}-${{ env.ARCH }}
+          path: wanderer-${{ env.VERSION }}-${{ env.ARCH }}.tar.gz
+
+
+  ##########################################################################
+  # RELEASE
+  ##########################################################################
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          files: wanderer.tar.gz
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: "Wanderer ${{ needs.prepare.outputs.version }}"
+          files: artifacts/**/*.tar.gz
