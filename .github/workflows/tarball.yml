@@ -39,7 +39,7 @@ jobs:
       - name: Build Web
         working-directory: web
         run: |
-          npm ci
+          npm ci --omit=dev
           npm run build
           npm prune --production
 
